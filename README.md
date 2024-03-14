@@ -1,7 +1,7 @@
 # USD3
 Official pytorch source code for 
 
-> [Improving and Unifying Discrete-time and Continuous-time **Discrete Denoising Diffusion**](https://arxiv.org/pdf/2402.03701.pdf)
+> [Improving and Unifying Discrete-time and Continuous-time **Discrete Denoising Diffusion**](https://arxiv.org/pdf/2402.03701.pdf)   
 > Lingxiao Zhao*, Xueying Ding*, Lijun Yu, Leman Akoglu
 
 ## About  
@@ -9,11 +9,11 @@ Official pytorch source code for
 
 #### Supported features:
   
-* [x] **Unified code**: you only need to switch loss function to choose between continuous time and discrete time. Forward and backward process are shared with the same code. 
-* [x] **Fast and memory efficient**: forward and backward process does NOT store the costly $C\times C$ transition matrices, thanks to the nominal data assumption. We provide both efficient exact VLB loss and simplified VLB loss. Backward process easily supports jump steps. 
-* [x] **Any dimension input**: our code easily support any multi-element object $X$ with dimensionality $(B, N_1,...,N_k, C)$ *without* any modification, where $k$ can be any positive integer. $B$ is the batch size. If samples have different number of elements, you can provide the mask of paddings to the loss function, which will ignore these padding elements. 
-* [x] **Conditional diffusion**: one can provide the mask for conditional part, and these elements won't change during the conditional diffusion process. 
-* [x] **Element-dependent noise**: we support two types of noise. 1) all elements share the same noise, with the categorical noise distribution having shape $(C)$. 2) element-dependent noise with noise distribution shape $(B, N_1,...,N_k, C)$. This is particularly useful for some conditional diffusion process, where one can define element-dependent noise based on the conditional part. 
+* ✅ **Unified code**: you only need to switch the loss function to choose between continuous time and discrete time. Forward and backward process are shared with the same code. 
+* ✅ **Fast and memory efficient**: forward and backward process does NOT store the costly $C\times C$ transition matrices, thanks to the nominal data assumption. We provide both efficient exact VLB loss and simplified VLB loss. Backward process easily supports jump steps. 
+* ✅ **Any dimension input**: our code easily support any multi-element object $X$ with dimensionality $(B, N_1,...,N_k, C)$ *without* any modification, where $k$ can be any positive integer. $B$ is the batch size. If samples have different number of elements, you can provide the mask of paddings to the loss function, which will ignore these padding elements. 
+* ✅ **Conditional diffusion**: one can provide the mask for conditional part, and these elements won't change during the conditional diffusion process. 
+* ✅ **Element-dependent noise**: we support two types of noise. 1) all elements share the same noise, with the categorical noise distribution having shape $(C)$. 2) element-dependent noise with noise distribution shape $(B, N_1,...,N_k, C)$. This is particularly useful in conditional diffusion process, where one can define element-dependent noise. 
 
 
 ## Installation 
