@@ -595,6 +595,9 @@ class UnifiedDiscreteDiffusion:
         """
         # TODO: think step size as a function of t.  
         z_n = x_t
+        if type(step_size) == float:
+            B = t.shape[0]
+            step_size = torch.full((B,), step_size, dtype=torch.float32).to(x_t.device)
         for n in range(max_steps):
             fprob_t = logits_to_prob(denoising_fn(x_t, t)) # TODO: add temperature later
             z_n, step_size = self._mcmc_step(fprob_t, t, z_n, step_size, min_stay_prob=min_stay_prob, m=m, conditional_mask=conditional_mask)
