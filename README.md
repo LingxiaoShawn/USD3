@@ -18,15 +18,22 @@ Official pytorch source code for
 
 ## Installation 
 
-#### If you only use [discrete_diffusion.py](./discrete_diffusion.py) for your own project
+### If you only use [discrete_diffusion.py](./discrete_diffusion.py) for your own project
+
+As long as you have pytorch (>= 1.13) installed, you are free to use directly :)
 
 
+### Run experiment in the paper 
+We follow the experimental setup and code base from [TauLDR](https://github.com/andrew-cr/tauLDR). 
 
-
-#### Run experiment in the paper 
 
 
 ## Usage 
+
+### If you only use [discrete_diffusion.py](./discrete_diffusion.py) for your own project
+
+
+### Run experiment in the paper 
 
 
 
