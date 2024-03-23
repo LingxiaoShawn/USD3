@@ -371,7 +371,7 @@ class UnifiedDiscreteDiffusion:
         pT_prob = torch.broadcast_to(m, qT_0_prob.shape) if m is not None else torch.full_like(qT_0_prob, 1/self.num_classes)
         return F.kl_div(pT_prob.clip(min=EPS).log(), qT_0_prob, reduction='none').sum(-1) # (B, N1, ..., Nk)
     
-    def discrete_time_loss(self, flogits_t, x_t, x_0, t, m=None, simplified_vlb=False, conditional_mask=None):
+    def discrete_time_loss(self, flogits_t, x_t, x_0, t, m=None, conditional_mask=None, simplified_vlb=False):
         """
         conditional_mask : (B, N1, ..., Nk) or None, the mask is used for conditioning or padding. 
         flogits_t: (B, N1, ..., Nk, C)
@@ -457,7 +457,7 @@ class UnifiedDiscreteDiffusion:
         # when coef =2, it is useful for MCMC corrector step (before multiply beta and step size)
         return inside_gt, beta_t, m_dot_xt
     
-    def continuous_time_loss(self, flogits_t, x_t, x_0, t, m=None, simplified_vlb=False, uniform_sampling=False, conditional_mask=None, denoising_fn=None):
+    def continuous_time_loss(self, flogits_t, x_t, x_0, t, m=None, conditional_mask=None, denoising_fn=None, uniform_sampling=False, simplified_vlb=False):
         """
         conditional_mask : (B, N1, ..., Nk) or None, the mask is used for conditioning or padding. 
         flogits_t: (B, N1, ..., Nk, C)
@@ -558,10 +558,107 @@ class UnifiedDiscreteDiffusion:
         return vlb_loss.sum(), ce_loss.sum() # add all loss togther 
 
     # ----------------------------------------------- loss computation combination --------------------------------------------- #
+    def compute_loss(self, 
+                     logits_t,
+                     x_t, 
+                     x_0, 
+                     t, 
+                     m, 
+                     coeff_ce=1.,
+                     coeff_vlb=1., 
+                     conditional_mask=None,
+                     denoising_fn=None,
+                     simplified_vlb=False):
 
+        if self.num_steps == 0:
+            # continuous-time diffusion
+            vlb_loss, ce_loss = self.continuous_time_loss(logits_t, x_t, x_0, t, m, conditional_mask, denoising_fn, uniform_sampling=False, simplified_vlb=simplified_vlb)
+        else:
+            # discrete-time diffusion
+            vlb_loss, ce_loss = self.discrete_time_loss(logits_t, x_t, x_0, t, m, conditional_mask, simplified_vlb=simplified_vlb)
 
+        loss = coeff_vlb * vlb_loss + coeff_ce * ce_loss
+
+        output_dict = {'loss'    : loss,
+                       'vlb_loss': vlb_loss,
+                       'ce_loss' : ce_loss,} 
+        return output_dict
+    
     # -------------------------------------------------- MCMC computation   ---------------------------------------------------- #
+    def mcmc_corrector(self, denoising_fn, x_t, t, step_size, max_steps=10, min_stay_prob=0.2, m=None, conditional_mask=None):
+        """
+        denoising_fn: (B, N1, ..., Nk, C) -> (B, N1, ..., Nk, C)
+        x_t        : (B, N1, ..., Nk)
+        t          : (B,)
+        step_size  : (B,)  (depends on t)
+        conditional_mask : (B, N1, ..., Nk) or None
+        """
+        # TODO: think step size as a function of t.  
+        z_n = x_t
+        for n in range(max_steps):
+            fprob_t = logits_to_prob(denoising_fn(x_t, t)) # TODO: add temperature later
+            z_n, step_size = self._mcmc_step(fprob_t, t, z_n, step_size, min_stay_prob=min_stay_prob, m=m, conditional_mask=conditional_mask)
+            # TODO: consider reduce step_size adaptively 
+        return z_n
+    
+    def _mcmc_step(self, fprob_t, t, z_n, delta_n, min_stay_prob=0.2, m=None, conditional_mask=None):
+        """
+        fprob_t: (B, N1, ..., Nk, C)
+        t      : (B,)
+        z_n    : (B, N1, ..., Nk)
+        delta_n: (B,)
+        
+        conditional_mask : (B, N1, ..., Nk) or None
+        """
+        # compute unnormailzed prob
+        prob_unnorm, beta_t, _ = self._gt_inner(fprob_t, z_n, t, m=m, coef=2)    # (B, N1, ..., Nk, C)
+        prob_unnorm = (beta_t * delta_n).view([-1]+[1]*z_n.dim()) * prob_unnorm 
+        max_scale = prob_unnorm.sum(dim=-1).flatten(start_dim=1).max(-1)[0]      # (B,)
 
+        # adjust the scale of prob_unnorm to prevent large delta_n 
+        for i, scale in enumerate(max_scale):
+            if scale >= (1-min_stay_prob):
+                prob_unnorm[i] = prob_unnorm[i] / scale * (1-min_stay_prob)
+                delta_n[i] = delta_n[i] * (1-min_stay_prob) / scale
 
+        # compute the prob 
+        broadcast_idx = get_broadcast_idx(z_n.shape)
+        prob_unnorm[broadcast_idx + [z_n]] += 1 - prob_unnorm.sum(-1) 
+        prob = prob_unnorm 
+
+        z_n_new = sample_categorical(prob)
+        if conditional_mask is not None:
+            assert conditional_mask.shape == z_n.shape
+            z_n_new[conditional_mask] = z_n[conditional_mask]
+
+        # sampling from this distribution
+        return z_n_new, delta_n
 
     # -------------------------------------------------- Backward sampling  ---------------------------------------------------- #
+    def sample_step(self, denoising_fn, x_t, t, s, m=None, mcmc_num_steps=0, mcmc_step_size=None, conditional_mask=None):
+        """ From time step t to time step s  (t>s)
+        denoising_fn : (B, N1, ..., Nk) -> (B, N1, ..., Nk, C)
+        x_t         : (B, N1, ..., Nk)
+        t           : (B,)
+        s           : (B,)
+        m           : (B, N1, ..., Nk, C) or None or (C)
+        mc_step_size: (B,) or None
+        conditional_mask : (B, N1, ..., Nk) or None
+        """
+        # compute fprob_t 
+        fprob_t = logits_to_prob(denoising_fn(x_t, t))           # (B, N1, ..., Nk, C)
+        # compute P(x_s | x_t)
+        prob_s = self.ps_t_prob(fprob_t, x_t, t=t, s=s, m=m)    # (B, N1, ..., Nk, C)
+        # for s = 0, change prob_s to fprob_t (final step sampling towards x0)
+        prob_s[s==0] = fprob_t[s==0]
+
+        # sample x_s 
+        x_s = sample_categorical(prob_s)                        # (B, N1, ..., Nk)
+        if conditional_mask is not None:
+            assert conditional_mask.shape == x_s.shape
+            x_s[conditional_mask] = x_t[conditional_mask]
+        
+        if mcmc_num_steps >0 and self.num_steps == 0:
+           assert mcmc_step_size is not None
+           x_s = self.mcmc_corrector(denoising_fn, x_s, s, mcmc_step_size, max_steps=mcmc_num_steps, min_stay_prob=0.2, m=m, conditional_mask=conditional_mask)
+        return x_s
