@@ -520,7 +520,7 @@ class UnifiedDiscreteDiffusion:
         qt_0_prob_at_zt = index_last_dim(qt_0_prob, z_t).unsqueeze(-1)
         qt_0_ratio = qt_0_prob / qt_0_prob_at_zt
         set_last_dim(qt_0_ratio, z_t)
-        rt_zt_given_anyinput = beta_t * (index_last_dim(m, z_t).unsqueeze(-1)) # B, N1, ..., Nk, 1, this ignores - y
+        rt_zt_given_anyinput = (beta_t * index_last_dim(m, z_t)).unsqueeze(-1) # B, N1, ..., Nk, 1, this ignores - y
 
         ## compute nomalizer M 
         if uniform_sampling: 
