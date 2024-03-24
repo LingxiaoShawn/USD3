@@ -10,7 +10,7 @@ def sample_uniform_categorical(x_shape, num_classes, device="cuda"):
     return torch.randint(num_classes, size=x_shape, device = device)
 
 def sample_bernoulli(prob, x_shape, device="cuda"):
-    assert prob.shape[:-1] == x_shape
+    assert prob.shape[0] == x_shape[0]
     u = torch.rand(x_shape, device=device)
     b = u.clamp(min=EPS) < prob
     return b
