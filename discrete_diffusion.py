@@ -528,7 +528,7 @@ class UnifiedDiscreteDiffusion:
         else:
             ### compute normalizer
             # rt(any_zd | any_zd), B x D x C values 
-            moveout_rate_allclass = beta_t_ori * (m - 1) # B, N1, ..., Nk, C
+            moveout_rate_allclass = beta_t_ori.unsqueeze(-1) * (m - 1) # B, N1, ..., Nk, C
             # rt(yt^d | yt^d), B x D values
             moveout_rate_yt = index_last_dim(moveout_rate_allclass, z_t).unsqueeze(-1) # B, N1, ..., Nk, 1
             normalizer_yt = -moveout_rate_yt.sum(dim=list(range(1, moveout_rate_yt.dim())), keepdim=True) # B, 1, ...,1k,1
