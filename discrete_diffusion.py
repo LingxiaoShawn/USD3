@@ -468,6 +468,7 @@ class UnifiedDiscreteDiffusion:
         """
         shape = [-1]+ [1]*(x_t.dim()-1) #B,1,....1_k
         m = torch.broadcast_to(m, flogits_t.shape) if m is not None else torch.full_like(fprob_t, 1/self.num_classes)
+        m = m.clone() # clone it in case that there is some inplace operation on m 
         ## ----------------- get  first term --------------------
         fprob_t = logits_to_prob(flogits_t) # (B, N1, ..., Nk, C)
         inside_gt, beta_t, m_dot_xt = self._gt_inner(fprob_t, x_t, t, m=m, coef=1.0)
