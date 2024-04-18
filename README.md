@@ -27,14 +27,75 @@ As long as you have pytorch (>= 1.13) installed, you are free to use directly :)
 We follow the experimental setup and code base from [TauLDR](https://github.com/andrew-cr/tauLDR). 
 
 
-
 ## Usage 
 
 ### If you only use [discrete_diffusion.py](./discrete_diffusion.py) for your own project
 
+* **Train**
+1. Create `UnifiedDiscreteDiffusion` object
+
+    ``` python 
+    from discrete_diffusion import UnifiedDiscreteDiffusion
+    diffusion = UnifiedDiscreteDiffusion(num_steps, # 0 means use continuous time
+                                         num_classes, 
+                                         noise_schedule_type, 
+                                         noise_schedule_args)
+    ```
+
+2. Sampling `x_t` from `t` and `x_0` (every batch)
+      * For continuous-time case (`num_steps=0`),  `t` should in the range  0 ~ 1.0
+      * For discrete-time, `t` should in integer in the range  `0 ~ num_steps`
+      * `m` is the noise distribution, see code for doc
+      * `conditional_mask` is used for keeping certain part unchanged or conditioned
+    ``` python
+    x_t = diffusion.qt_0_sample(x_0, t, m, conditional_mask)
+    ```
+
+3. Compute loss with input the noisy `x_t` and original `x_0` (every batch)
+    * Assume you have a `model` (network): (B, N1, ..., Nk), t -> (B, N1, ..., Nk, C), where C is `num_classes`
+    * `model` takes `x_t` and `t` as input, and output prediction of `x_0` distribution
+    ``` python
+    logits_t = model(x_t, t)
+
+    # loss = coeff_ce * ce + coeff_vlb * vlb
+    loss = diffusion.compute_loss(logits_t,
+                                  x_t, 
+                                  x_0, 
+                                  t, 
+                                  m, 
+                                  coeff_ce=0.1,
+                                  coeff_vlb=1.0, 
+                                  conditional_mask=conditional_mask,
+                                  denoising_fn=model,
+                                  simplified_vlb=False)
+    ```
+    * There are three parameters to play (`coeff_ce`, `coeff_vlb`, `simplified_vlb`), see paper for detail.
+
+4. Update model with 
+```loss['loss'].backward()``` (every batch)
+
+* **Generation**  
+  * After training, you can use the trained `model` to generate samples. 
+  * In discrete-time case, one would want `num_backward_steps` to be smaller than the training steps `num_steps` for good performance.  
+
+  ``` python
+  diffusion.sample(model,
+                   num_backward_steps, 
+                   m, 
+                   conditional_mask=None,
+                   conditional_input=None)
+  ```
+  * One can also use mcmc refinement in sampling, see code doc for parameters. 
+
 
 ### Run experiment in the paper 
 
+
+## TODO
+- [ ] Add "Run experiment in the paper"
+  - [ ] Installation
+  - [ ] Usage
+  - [ ] Code
 
 
 ## Citation 
