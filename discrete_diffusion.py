@@ -1,6 +1,8 @@
 import torch
 import torch.nn.functional as F
 import math
+from tqdm import tqdm
+import numpy as np
 
 EPS = 1e-30
 LOG_EPS = math.log(EPS)
@@ -107,7 +109,7 @@ def noise_schedule(t_step,
 
     return alphabar_t, beta_t
 
-class UnifiedDiscreteDiffusion:
+class DiscreteDiffusion:
     """
     Unified discrete-time and continuous-time discrete diffusion model.
     The code is closely following the paper's notation and implementation.
@@ -197,8 +199,7 @@ class UnifiedDiscreteDiffusion:
         assert x_0.dim() >= 2
         sample_shape = x_0.shape
         alphabar_t, _ = self.get_alphabar_beta(t)  
-        alphabar_t = alphabar_t.view([-1]+[1]*(x_0.dim()-1)) #B,N1,....Nk
-
+        alphabar_t = alphabar_t.view([-1]+[1]*(x_0.dim()-1)) #B,1
         #fast sampling from Cat(m)
         if m is None:
             m0 = sample_uniform_categorical(sample_shape, self.num_classes, device=x_0.device) # x_0 shape
@@ -411,7 +412,7 @@ class UnifiedDiscreteDiffusion:
 
         vlb_loss = vlb_loss.view(batch_size, -1).sum(-1)
         ce_loss = ce_loss.view(batch_size, -1).sum(-1)
-        return vlb_loss.sum(), ce_loss.sum() # add all loss togther 
+        return vlb_loss.mean(), ce_loss.mean() # average across batches
     
     # ----------------------------------------- loss computation: continuous-time case  ---------------------------------------- #
     def _log_gt_inner(self, flogprob_t, x_t, t, m=None, coef=1):
@@ -457,7 +458,7 @@ class UnifiedDiscreteDiffusion:
         # when coef =2, it is useful for MCMC corrector step (before multiply beta and step size)
         return inside_gt, beta_t, m_dot_xt
     
-    def continuous_time_loss(self, flogits_t, x_t, x_0, t, m=None, conditional_mask=None, denoising_fn=None, uniform_sampling=False, simplified_vlb=False):
+    def continuous_time_loss(self, flogits_t, x_t, x_0, t, m=None, conditional_mask=None, denoising_fn=None, uniform_sampling=True, simplified_vlb=False):
         """
         conditional_mask : (B, N1, ..., Nk) or None, the mask is used for conditioning or padding. 
         flogits_t: (B, N1, ..., Nk, C)
@@ -467,8 +468,7 @@ class UnifiedDiscreteDiffusion:
         m        : (B, N1, ..., Nk, C) or None, or (C)
         """
         shape = [-1]+ [1]*(x_t.dim()-1) #B,1,....1_k
-        m = torch.broadcast_to(m, flogits_t.shape) if m is not None else torch.full_like(fprob_t, 1/self.num_classes)
-        m = m.clone() # clone it in case that there is some inplace operation on m 
+        m = torch.broadcast_to(m, flogits_t.shape) if m is not None else torch.full_like(flogits_t, 1/self.num_classes)
         ## ----------------- get  first term --------------------
         fprob_t = logits_to_prob(flogits_t) # (B, N1, ..., Nk, C)
         inside_gt, beta_t, m_dot_xt = self._gt_inner(fprob_t, x_t, t, m=m, coef=1.0)
@@ -485,10 +485,10 @@ class UnifiedDiscreteDiffusion:
         ## Sample z first from S, here we support two types of S, uniform and the same with CTMC forward distribution
         if uniform_sampling: #### sampling with uniform distribution 
             ## For each b, sample a dimension from N1*N2*...*Nk
-            sampled_dim = torch.randint(low=0, high=x_t.size(-1), size=(B,), device=x_t.device)
+            changed_dim = torch.randint(low=0, high=x_t.size(-1), size=(B,), device=x_t.device)
             ## random sample a vector with dimension (B, 1), from C-1 classes. Different from x_t[sampled_dim] 
             idx = torch.arange(B, device=x_t.device)
-            ori_class = x_t[idx, sampled_dim]
+            ori_class = x_t[idx, changed_dim]
             new_class = torch.randint(low=0, high=self.num_classes-1, size=(B,), device=x_t.device)
             new_class[new_class>=ori_class] += 1 # make sure new_class != ori_class
             
@@ -556,7 +556,7 @@ class UnifiedDiscreteDiffusion:
 
         vlb_loss = vlb_loss.view(B, -1).sum(-1)
         ce_loss = ce_loss.view(B, -1).sum(-1)
-        return vlb_loss.sum(), ce_loss.sum() # add all loss togther 
+        return vlb_loss.mean(), ce_loss.mean() # average across batch sizes 
 
     # ----------------------------------------------- loss computation combination --------------------------------------------- #
     def compute_loss(self, 
@@ -573,7 +573,7 @@ class UnifiedDiscreteDiffusion:
 
         if self.num_steps == 0:
             # continuous-time diffusion
-            vlb_loss, ce_loss = self.continuous_time_loss(logits_t, x_t, x_0, t, m, conditional_mask, denoising_fn, uniform_sampling=False, simplified_vlb=simplified_vlb)
+            vlb_loss, ce_loss = self.continuous_time_loss(logits_t, x_t, x_0, t, m, conditional_mask, denoising_fn, uniform_sampling=True, simplified_vlb=simplified_vlb)
         else:
             # discrete-time diffusion
             vlb_loss, ce_loss = self.discrete_time_loss(logits_t, x_t, x_0, t, m, conditional_mask, simplified_vlb=simplified_vlb)
@@ -660,6 +660,7 @@ class UnifiedDiscreteDiffusion:
         x_s = sample_categorical(prob_s)                        # (B, N1, ..., Nk)
         if conditional_mask is not None:
             assert conditional_mask.shape == x_s.shape
+            assert conditional_mask.dtype == torch.bool
             x_s[conditional_mask] = x_t[conditional_mask]
         
         if mcmc_num_steps >0 and self.num_steps == 0:
