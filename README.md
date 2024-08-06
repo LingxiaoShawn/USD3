@@ -4,8 +4,14 @@ Official pytorch source code for
 > [Improving and Unifying Discrete-time and Continuous-time **Discrete Denoising Diffusion**](https://arxiv.org/pdf/2402.03701.pdf)   
 > Lingxiao Zhao*, Xueying Ding*, Lijun Yu, Leman Akoglu
 
+## Update: simpler and faster continuous-time loss
+
+We have discovered that the continuous loss we derived can be further simplified without any approximations, resulting in a much faster computation that requires only a single forward pass of the model. The code has already been updated, and we will soon update the arXiv paper to include the derivation. Note that the simplified continuous loss is similar to the loss described in [SEDD](https://arxiv.org/pdf/2310.16834), though our derivation stems from a completely different perspective: we derive it directly from the VLB bound shown in [CTMC](https://arxiv.org/abs/2205.14987). This indicates that concrete socre matching is the same as VLB derivation from CTMC, which is also shown in continuous-state model (score matching is the same as VLB).  
+
+
 ## About  
 **Discrete** diffusion models are less explored comparing with continuous-state diffusion models, yet there are many dicrete data like language and graph. We have **unified and simplified** the diffusion framework (forward diffusion process, backward denoising process, and loss computation) for *discrete-time and continuous-time* denoising diffusion. Notice that the framework currently works on *nominal data* where categorical classes are NOT ordered. 
+
 
 #### Supported features:
   
