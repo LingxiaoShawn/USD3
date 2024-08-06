@@ -72,7 +72,6 @@ We follow the experimental setup and code base from [TauLDR](https://github.com/
                                   coeff_ce=0.1,
                                   coeff_vlb=1.0, 
                                   conditional_mask=conditional_mask,
-                                  denoising_fn=model,
                                   simplified_vlb=False)
     ```
     * There are three parameters to play (`coeff_ce`, `coeff_vlb`, `simplified_vlb`), see paper for detail.
