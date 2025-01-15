@@ -30,7 +30,7 @@ def get_broadcast_idx(shape):
     return [torch.arange(s).view([1]*i+[-1]+[1]*(len(shape)-1-i)) for i, s in enumerate(shape)]
 
 def index_last_dim(x, idx):
-    """ Index the last dimension of the input tensor `x` using the indices `idx`.
+    """ Index the last dimension of the input tensor `x` using the indices `idx`. [Equivalent to torch.gather]
     Args:
         x  : Tensor of shape (B, N1, ..., Nk, C).
         idx: Tensor of shape (B, N1, ..., Nk) with values less than C.
@@ -42,7 +42,7 @@ def index_last_dim(x, idx):
     return x[broadcast_idx + [idx]]
 
 def set_last_dim(x, idx, value=0, inplace_add=False):
-    """ Set the last dimension of the input tensor `x` at the specified indices `idx` to the given `value`.
+    """ Set the last dimension of the input tensor `x` at the specified indices `idx` to the given `value`. [Equivalent to torch.scatter]
     Args:
         x   : The input tensor of shape (B, N1, ..., Nk, C).
         idx : The indices tensor of shape (B, N1, ..., Nk) with idx.max() < C.
